@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>KnowledgeBase RAG</title>
+    <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header>
+            <h1>KnowledgeBase RAG</h1>
+            <p class="subtitle">Multi-Domain AI Knowledge Assistant</p>
+        </header>
+
+        <!-- Main Content -->
+        <div class="main-content">
+            <!-- Sidebar -->
+            <aside class="sidebar">
+                <div class="sidebar-section">
+                    <h2>Domains</h2>
+                    <div class="domain-list" id="domainList">
+                        <div class="loading">Loading domains...</div>
+                    </div>
+                    <button class="btn btn-primary" id="newDomainBtn">+ New Domain</button>
+                </div>
+
+                <div class="sidebar-section">
+                    <h3>Upload Files</h3>
+                    <div class="upload-zone" id="uploadZone">
+                        <input type="file" id="fileInput" multiple accept=".pdf,.txt,.md,.docx,.html,.htm,.csv,.xlsx,.xls,.pptx,.jpg,.jpeg,.png,.tiff,.tif,.bmp" style="display: none;">
+                        <div class="upload-icon">+</div>
+                        <p>Click or drag files here</p>
+                        <p class="upload-hint">Supports PDF, DOCX, Excel, PowerPoint, images & more</p>
+                    </div>
+                    <button class="btn btn-secondary" id="uploadBtn" disabled>Upload Files</button>
+                </div>
+
+                <div class="sidebar-section" id="domainInfo" style="display: none;">
+                    <h3>Domain Info</h3>
+                    <div class="info-item">
+                        <span class="info-label">Files:</span>
+                        <span id="infoFiles">0</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">Status:</span>
+                        <span id="infoStatus" class="status-badge">Not Indexed</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">Updated:</span>
+                        <span id="infoUpdated">Never</span>
+                    </div>
+                    <button class="btn btn-secondary" id="reindexBtn">Reindex</button>
+                    <button class="btn btn-danger" id="deleteBtn">Delete Domain</button>
+                </div>
+            </aside>
+
+            <!-- Chat Area -->
+            <main class="chat-area">
+                <div class="welcome" id="welcome">
+                    <div class="welcome-icon">KB</div>
+                    <h2>Welcome to KnowledgeBase RAG</h2>
+                    <p>Select or create a domain, upload your documents, and start asking questions!</p>
+                    <div class="feature-list">
+                        <div class="feature">
+                            <span class="feature-icon">•</span>
+                            <span>13+ file formats supported</span>
+                        </div>
+                        <div class="feature">
+                            <span class="feature-icon">•</span>
+                            <span>AI-powered semantic search</span>
+                        </div>
+                        <div class="feature">
+                            <span class="feature-icon">•</span>
+                            <span>Citation-based answers</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="chat-container" id="chatContainer" style="display: none;">
+                    <div class="messages" id="messages"></div>
+                    
+                    <div class="input-area">
+                        <textarea 
+                            id="questionInput" 
+                            placeholder="Ask a question about your documents..."
+                            rows="2"
+                        ></textarea>
+                        <button class="btn btn-primary" id="askBtn" disabled>
+                            <span id="askBtnText">Ask</span>
+                            <span id="askBtnLoader" class="loader" style="display: none;"></span>
+                        </button>
+                    </div>
+                </div>
+            </main>
+        </div>
+    </div>
+
+    <!-- New Domain Modal -->
+    <div class="modal" id="newDomainModal">
+        <div class="modal-content">
+            <h2>Create New Domain</h2>
+            <input 
+                type="text" 
+                id="domainNameInput" 
+                placeholder="Enter domain name (e.g., contracts, research)"
+                maxlength="50"
+            >
+            <div class="modal-actions">
+                <button class="btn btn-secondary" id="cancelDomainBtn">Cancel</button>
+                <button class="btn btn-primary" id="createDomainBtn">Create</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Processing Toast -->
+    <div class="toast" id="toast"></div>
+
+    <script src="/static/app.js"></script>
+</body>
+</html>

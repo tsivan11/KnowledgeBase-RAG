@@ -95,9 +95,9 @@ def main(domain: str, question: str = None):
     context = "\n\n".join(context_blocks)
 
     system = (
-        "You are a strict, citation-bound contract assistant.\n"
+        "You are a strict, citation-bound knowledgebase assistant.\n"
         "Answer ONLY using the provided context blocks. If the context is insufficient, "
-        "say: 'I don't know based on the provided contracts.'\n"
+        "say: 'I don't know based on the provided files.'\n"
         "Cite sources using bracket numbers like [1], [2]."
     )
 
