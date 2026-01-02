@@ -57,6 +57,7 @@ TOP_K = 8
 class QueryRequest(BaseModel):
     domain: str
     question: str
+    conversation_history: List[dict] = []
 
 
 class QueryResponse(BaseModel):
@@ -121,8 +122,118 @@ def process_domain(domain: str):
         return False
 
 
-def query_domain(domain: str, question: str) -> dict:
+def classify_intent(client: OpenAI, question: str, conversation_history: List[dict]) -> str:
+    """Classify if the question needs RAG or can be answered conversationally."""
+    prompt = (
+        f"User's message: \"{question}\"\n\n"
+        "Classify this message into ONE of these categories:\n"
+        "- greeting: Hello, hi, hey, good morning, etc.\n"
+        "- thanks: Thank you, thanks, appreciate it, etc.\n"
+        "- chitchat: General conversation not requiring document lookup\n"
+        "- meta: Questions about the knowledge base itself (what documents/files do you have, what can you tell me about, etc.)\n"
+        "- document_query: Needs information from documents\n\n"
+        "Output ONLY one word: greeting, thanks, chitchat, meta, or document_query"
+    )
+    
+    resp = client.chat.completions.create(
+        model=CHAT_MODEL,
+        temperature=0,
+        messages=[{"role": "user", "content": prompt}]
+    )
+    
+    intent = resp.choices[0].message.content.strip().lower()
+    print(f"[Intent Classification] '{question}' -> {intent}")
+    return intent
+
+
+def handle_conversational(client: OpenAI, question: str, domain: str, conversation_history: List[dict]) -> str:
+    """Handle non-document questions conversationally."""
+    from datetime import datetime
+    current_date = datetime.now().strftime("%B %d, %Y")
+    
+    # Build conversation context
+    system_prompt = (
+        f"You are a helpful, friendly assistant working with the '{domain}' knowledge domain. "
+        f"Today's date is {current_date}. "
+        f"Be warm and conversational, but NEVER use emojis. "
+        f"You can answer questions about what domain you're in, "
+        f"but for specific factual questions about {domain}, direct users to ask document-based questions."
+    )
+    messages = [{"role": "system", "content": system_prompt}]
+    
+    # Add recent history
+    for exchange in conversation_history[-3:]:
+        messages.append({"role": "user", "content": exchange.get('question', '')})
+        messages.append({"role": "assistant", "content": exchange.get('answer', '')})
+    
+    messages.append({"role": "user", "content": question})
+    
+    resp = client.chat.completions.create(
+        model=CHAT_MODEL,
+        temperature=0.7,
+        messages=messages
+    )
+    
+    return resp.choices[0].message.content
+
+
+def handle_meta_query(domain: str) -> str:
+    """Handle questions about what documents are available."""
+    domain_path = KB_DIR / domain
+    
+    if not domain_path.exists():
+        return f"The '{domain}' domain exists but has no documents yet."
+    
+    # Get all files
+    files = get_domain_files(domain)
+    
+    if not files:
+        return f"The '{domain}' domain exists but has no documents yet."
+    
+    # Group by file type
+    file_types = {}
+    for f in files:
+        ext = f.suffix.lower()
+        if ext not in file_types:
+            file_types[ext] = []
+        file_types[ext].append(f.name)
+    
+    # Build response
+    response = f"I have access to {len(files)} document(s) in the '{domain}' domain:\n\n"
+    
+    for ext, names in sorted(file_types.items()):
+        response += f"{ext.upper()} files ({len(names)}):\n"
+        for name in sorted(names)[:10]:  # Limit to 10 per type
+            response += f"  - {name}\n"
+        if len(names) > 10:
+            response += f"  ... and {len(names) - 10} more\n"
+        response += "\n"
+    
+    response += "Feel free to ask me anything about these documents!"
+    return response
+
+
+def query_domain(domain: str, question: str, conversation_history: List[dict] = None) -> dict:
     """Query a domain and return answer with sources."""
+    if conversation_history is None:
+        conversation_history = []
+    
+    client = OpenAI()
+    
+    # Classify intent - does this need RAG?
+    intent = classify_intent(client, question, conversation_history)
+    
+    if intent == 'meta':
+        print(f"[DEBUG] Meta query - listing documents")
+        answer = handle_meta_query(domain)
+        return {"answer": answer, "sources": []}
+    
+    if intent in ['greeting', 'thanks', 'chitchat']:
+        print(f"[DEBUG] Non-document query detected - responding conversationally")
+        answer = handle_conversational(client, question, domain, conversation_history)
+        return {"answer": answer, "sources": []}
+    
+    # Document query - proceed with RAG
     index_path = DATA_DIR / domain / "faiss.index"
     meta_path = DATA_DIR / domain / "chunks_meta.json"
     
@@ -131,8 +242,6 @@ def query_domain(domain: str, question: str) -> dict:
     
     if not os.getenv("OPENAI_API_KEY"):
         raise HTTPException(status_code=500, detail="OPENAI_API_KEY not configured")
-    
-    client = OpenAI()
     
     # Load index and metadata
     index = faiss.read_index(str(index_path))
@@ -300,7 +409,7 @@ async def trigger_processing(domain_name: str, background_tasks: BackgroundTasks
 @app.post("/api/query", response_model=QueryResponse)
 async def query(request: QueryRequest):
     """Query a domain with a question."""
-    result = query_domain(request.domain, request.question)
+    result = query_domain(request.domain, request.question, request.conversation_history)
     return QueryResponse(**result)
 
 

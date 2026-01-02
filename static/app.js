@@ -444,7 +444,23 @@ async function handleAsk() {
         return;
     }
     
-    // Disable input
+    // Show question immediately
+    const messageDiv = document.createElement('div');
+    messageDiv.className = 'message';
+    messageDiv.innerHTML = `
+        <div class="message-question">
+            <strong>Q:</strong>${escapeHtml(question)}
+        </div>
+        <div class="message-answer">
+            <strong>A:</strong>
+            <div class="answer-text">Thinking...</div>
+        </div>
+    `;
+    messages.appendChild(messageDiv);
+    messages.scrollTop = messages.scrollHeight;
+    
+    // Clear input and disable
+    questionInput.value = '';
     askBtn.disabled = true;
     askBtnText.style.display = 'none';
     askBtnLoader.style.display = 'block';
@@ -452,9 +468,34 @@ async function handleAsk() {
     
     try {
         const result = await queryDomain(currentDomain, question);
-        addMessage(question, result.answer, result.sources);
-        questionInput.value = '';
+        
+        // Update the answer in the existing message
+        let answerHtml = `<strong>A:</strong><div class="answer-text">${escapeHtml(result.answer)}</div>`;
+        
+        if (result.sources && result.sources.length > 0) {
+            answerHtml += '<div class="sources"><div class="sources-header">Sources:</div>';
+            result.sources.forEach(source => {
+                const location = [
+                    source.page ? `p.${source.page}` : null,
+                    source.section ? `s.${source.section}` : null
+                ].filter(Boolean).join(', ');
+                
+                answerHtml += `
+                    <div class="source-item">
+                        <span class="source-ref">[${source.rank}]</span>
+                        <span class="source-file">${escapeHtml(source.source)}</span>
+                        ${location ? ` (${location})` : ''}
+                        <div class="source-preview">${escapeHtml(source.text_preview)}</div>
+                    </div>
+                `;
+            });
+            answerHtml += '</div>';
+        }
+        
+        messageDiv.querySelector('.message-answer').innerHTML = answerHtml;
+        messages.scrollTop = messages.scrollHeight;
     } catch (error) {
+        messageDiv.querySelector('.answer-text').textContent = 'Error: ' + (error.message || 'Query failed');
         showToast(error.message || 'Query failed', 'error');
     } finally {
         askBtn.disabled = false;
