@@ -1,6 +1,7 @@
 // State
 let currentDomain = null;
 let selectedFiles = [];
+let conversationHistory = {};  // Store conversation history per domain
 
 // DOM Elements
 const domainList = document.getElementById('domainList');
@@ -113,12 +114,19 @@ async function uploadFiles(domain, files) {
 
 async function queryDomain(domain, question) {
     try {
+        // Get conversation history for this domain
+        const history = conversationHistory[domain] || [];
+        
         const response = await fetch('/api/query', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
             },
-            body: JSON.stringify({ domain, question })
+            body: JSON.stringify({ 
+                domain, 
+                question,
+                conversation_history: history
+            })
         });
         
         if (!response.ok) {
@@ -201,6 +209,11 @@ function createDomainItem(domain) {
 
 function selectDomain(name) {
     currentDomain = name;
+    
+    // Initialize conversation history for this domain if not exists
+    if (!conversationHistory[name]) {
+        conversationHistory[name] = [];
+    }
     
     // Update UI
     document.querySelectorAll('.domain-item').forEach(item => {
@@ -494,6 +507,17 @@ async function handleAsk() {
         
         messageDiv.querySelector('.message-answer').innerHTML = answerHtml;
         messages.scrollTop = messages.scrollHeight;
+        
+        // Store in conversation history
+        if (!conversationHistory[currentDomain]) {
+            conversationHistory[currentDomain] = [];
+        }
+        conversationHistory[currentDomain].push({
+            question: question,
+            answer: result.answer,
+            sources: result.sources
+        });
+        console.log(`[DEBUG] Stored conversation, total items: ${conversationHistory[currentDomain].length}`);
     } catch (error) {
         messageDiv.querySelector('.answer-text').textContent = 'Error: ' + (error.message || 'Query failed');
         showToast(error.message || 'Query failed', 'error');

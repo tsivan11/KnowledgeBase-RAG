@@ -126,12 +126,16 @@ def classify_intent(client: OpenAI, question: str, conversation_history: List[di
     """Classify if the question needs RAG or can be answered conversationally."""
     prompt = (
         f"User's message: \"{question}\"\n\n"
-        "Classify this message into ONE of these categories:\n"
+        "Classify this message into ONE of these categories:\n\n"
         "- greeting: Hello, hi, hey, good morning, etc.\n"
         "- thanks: Thank you, thanks, appreciate it, etc.\n"
         "- chitchat: General conversation not requiring document lookup\n"
-        "- meta: Questions about the knowledge base itself (what documents/files do you have, what can you tell me about, etc.)\n"
-        "- document_query: Needs information from documents\n\n"
+        "- meta: ONLY questions asking what files/documents exist (e.g., 'what files do you have?', 'list the documents', 'show me all PDFs')\n"
+        "- document_query: Everything else - questions about content, summaries, reformatting, follow-ups, etc.\n\n"
+        "CRITICAL RULES:\n"
+        "- If it asks about CONTENT (even reformatting/summarizing), it's document_query\n"
+        "- If it asks about WHAT FILES EXIST, it's meta\n"
+        "- When in doubt, choose document_query\n\n"
         "Output ONLY one word: greeting, thanks, chitchat, meta, or document_query"
     )
     
@@ -213,6 +217,48 @@ def handle_meta_query(domain: str) -> str:
     return response
 
 
+def reformulate_query(client: OpenAI, question: str, conversation_history: List[dict]) -> str:
+    """Reformulate follow-up questions to include context from conversation history."""
+    if not conversation_history:
+        return question
+    
+    # Build context from last 2 exchanges
+    context_items = []
+    for exchange in conversation_history[-2:]:
+        q = exchange.get('question', '')
+        a = exchange.get('answer', '')
+        if q and a:
+            context_items.append(f"Q: {q}\nA: {a}")
+    
+    if not context_items:
+        return question
+    
+    context = "\n\n".join(context_items)
+    
+    prompt = (
+        f"CONVERSATION HISTORY:\n{context}\n\n"
+        f"NEW QUESTION: {question}\n\n"
+        "If the new question contains pronouns (it, that, this, they, etc.) or references "
+        "to something mentioned in the conversation history, rewrite it as a standalone question. "
+        "Replace ALL pronouns and implicit references with the actual entities from the history.\n\n"
+        "If the question is already standalone, return it unchanged.\n\n"
+        "Output ONLY the reformulated question, nothing else."
+    )
+    
+    resp = client.chat.completions.create(
+        model=CHAT_MODEL,
+        temperature=0,
+        messages=[{"role": "user", "content": prompt}]
+    )
+    
+    reformulated = resp.choices[0].message.content.strip()
+    
+    if reformulated != question:
+        print(f"[Query Reformulation] '{question}' -> '{reformulated}'")
+    
+    return reformulated
+
+
 def query_domain(domain: str, question: str, conversation_history: List[dict] = None) -> dict:
     """Query a domain and return answer with sources."""
     if conversation_history is None:
@@ -233,6 +279,9 @@ def query_domain(domain: str, question: str, conversation_history: List[dict] = 
         answer = handle_conversational(client, question, domain, conversation_history)
         return {"answer": answer, "sources": []}
     
+    # Document query - reformulate if needed
+    reformulated_question = reformulate_query(client, question, conversation_history)
+    
     # Document query - proceed with RAG
     index_path = DATA_DIR / domain / "faiss.index"
     meta_path = DATA_DIR / domain / "chunks_meta.json"
@@ -247,8 +296,8 @@ def query_domain(domain: str, question: str, conversation_history: List[dict] = 
     index = faiss.read_index(str(index_path))
     meta = json.loads(meta_path.read_text(encoding="utf-8"))
     
-    # Embed query
-    resp = client.embeddings.create(model=EMBED_MODEL, input=[question])
+    # Embed query (use reformulated question)
+    resp = client.embeddings.create(model=EMBED_MODEL, input=[reformulated_question])
     qvec = np.array(resp.data[0].embedding, dtype="float32").reshape(1, -1)
     faiss.normalize_L2(qvec)
     
@@ -295,10 +344,24 @@ def query_domain(domain: str, question: str, conversation_history: List[dict] = 
         "Cite sources using bracket numbers like [1], [2]."
     )
     
+    # Build conversation history for context (if available)
+    history_text = ""
+    if conversation_history:
+        history_items = []
+        for exchange in conversation_history[-3:]:  # Last 3 exchanges
+            q = exchange.get('question', '')
+            a = exchange.get('answer', '')
+            if q and a:
+                history_items.append(f"Q: {q}\nA: {a}")
+        if history_items:
+            history_text = "PREVIOUS CONVERSATION:\n" + "\n\n".join(history_items) + "\n\n"
+    
     user = (
+        f"{history_text}"
         f"CONTEXT BLOCKS:\n{context}\n\n"
         f"QUESTION: {question}\n\n"
-        "Write a concise answer with citations."
+        "Write a concise answer with citations. If the question asks to reformat or restructure "
+        "a previous answer, use the previous conversation to understand what to reformat."
     )
     
     resp = client.chat.completions.create(
