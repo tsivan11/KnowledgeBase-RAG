@@ -331,7 +331,7 @@ def query_domain(domain: str, question: str, conversation_history: List[dict] = 
             "page": rec.get('page'),
             "section": rec.get('section'),
             "score": float(score),
-            "text_preview": rec['text'][:200] + "..." if len(rec['text']) > 200 else rec['text']
+            "text": rec['text']
         })
     
     context = "\n\n".join(context_blocks)

@@ -292,21 +292,60 @@ function addMessage(question, answer, sources) {
     
     if (sources && sources.length > 0) {
         html += '<div class="sources"><div class="sources-header">Sources:</div>';
+        
+        // Group sources by document
+        const grouped = {};
         sources.forEach(source => {
-            const location = [
-                source.page ? `p.${source.page}` : null,
-                source.section ? `s.${source.section}` : null
-            ].filter(Boolean).join(', ');
+            if (!grouped[source.source]) {
+                grouped[source.source] = [];
+            }
+            grouped[source.source].push(source);
+        });
+        
+        // Display grouped sources
+        Object.keys(grouped).forEach(filename => {
+            const docSources = grouped[filename];
+            const sourceId = `source-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
             
             html += `
-                <div class="source-item">
-                    <span class="source-ref">[${source.rank}]</span>
-                    <span class="source-file">${escapeHtml(source.source)}</span>
-                    ${location ? ` (${location})` : ''}
-                    <div class="source-preview">${escapeHtml(source.text_preview)}</div>
+                <div class="source-group">
+                    <div class="source-group-header" onclick="toggleSourceGroup('${sourceId}')">
+                        <span class="source-toggle">▶</span>
+                        <span class="source-file">${escapeHtml(filename)}</span>
+                        <span class="source-count">${docSources.length} chunk${docSources.length > 1 ? 's' : ''}</span>
+                    </div>
+                    <div class="source-group-items" id="${sourceId}" style="display: none;">
+            `;
+            
+            docSources.forEach(source => {
+                const location = [
+                    source.page ? `p.${source.page}` : null,
+                    source.section ? `s.${source.section}` : null
+                ].filter(Boolean).join(', ');
+                
+                const scorePercent = Math.round(source.score * 100);
+                const scoreClass = scorePercent >= 80 ? 'high' : scorePercent >= 60 ? 'medium' : 'low';
+                const chunkId = `chunk-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+                
+                html += `
+                    <div class="source-item">
+                        <div class="source-item-header" onclick="toggleChunk('${chunkId}')">
+                            <span class="source-ref">[${source.rank}]</span>
+                            ${location ? `<span class="source-location">${location}</span>` : ''}
+                            <span class="source-score ${scoreClass}">${scorePercent}%</span>
+                            <span class="chunk-toggle">▼</span>
+                        </div>
+                        <div class="source-text" id="${chunkId}" style="display: none;">${escapeHtml(source.text)}</div>
+                    </div>
+                `;
+            });
+            
+            html += `
+                    </div>
                 </div>
             `;
         });
+        
         html += '</div>';
     }
     
@@ -338,6 +377,31 @@ function escapeHtml(text) {
     const div = document.createElement('div');
     div.textContent = text;
     return div.innerHTML;
+}
+
+// Toggle functions for expandable sources
+function toggleSourceGroup(id) {
+    const element = document.getElementById(id);
+    const toggle = element.previousElementSibling.querySelector('.source-toggle');
+    if (element.style.display === 'none') {
+        element.style.display = 'block';
+        toggle.textContent = '▼';  // Down arrow
+    } else {
+        element.style.display = 'none';
+        toggle.textContent = '▶';  // Right arrow
+    }
+}
+
+function toggleChunk(id) {
+    const element = document.getElementById(id);
+    const toggle = element.previousElementSibling.querySelector('.chunk-toggle');
+    if (element.style.display === 'none') {
+        element.style.display = 'block';
+        toggle.textContent = '▲';  // Up arrow
+    } else {
+        element.style.display = 'none';
+        toggle.textContent = '▼';  // Down arrow
+    }
 }
 
 // Event Listeners
@@ -487,21 +551,60 @@ async function handleAsk() {
         
         if (result.sources && result.sources.length > 0) {
             answerHtml += '<div class="sources"><div class="sources-header">Sources:</div>';
+            
+            // Group sources by document
+            const grouped = {};
             result.sources.forEach(source => {
-                const location = [
-                    source.page ? `p.${source.page}` : null,
-                    source.section ? `s.${source.section}` : null
-                ].filter(Boolean).join(', ');
+                if (!grouped[source.source]) {
+                    grouped[source.source] = [];
+                }
+                grouped[source.source].push(source);
+            });
+            
+            // Display grouped sources
+            Object.keys(grouped).forEach(filename => {
+                const docSources = grouped[filename];
+                const sourceId = `source-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
                 
                 answerHtml += `
-                    <div class="source-item">
-                        <span class="source-ref">[${source.rank}]</span>
-                        <span class="source-file">${escapeHtml(source.source)}</span>
-                        ${location ? ` (${location})` : ''}
-                        <div class="source-preview">${escapeHtml(source.text_preview)}</div>
+                    <div class="source-group">
+                        <div class="source-group-header" onclick="toggleSourceGroup('${sourceId}')">
+                            <span class="source-toggle">▶</span>
+                            <span class="source-file">${escapeHtml(filename)}</span>
+                            <span class="source-count">${docSources.length} chunk${docSources.length > 1 ? 's' : ''}</span>
+                        </div>
+                        <div class="source-group-items" id="${sourceId}" style="display: none;">
+                `;
+                
+                docSources.forEach(source => {
+                    const location = [
+                        source.page ? `p.${source.page}` : null,
+                        source.section ? `s.${source.section}` : null
+                    ].filter(Boolean).join(', ');
+                    
+                    const scorePercent = Math.round(source.score * 100);
+                    const scoreClass = scorePercent >= 80 ? 'high' : scorePercent >= 60 ? 'medium' : 'low';
+                    const chunkId = `chunk-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+                    
+                    answerHtml += `
+                        <div class="source-item">
+                            <div class="source-item-header" onclick="toggleChunk('${chunkId}')">
+                                <span class="source-ref">[${source.rank}]</span>
+                                ${location ? `<span class="source-location">${location}</span>` : ''}
+                                <span class="source-score ${scoreClass}">${scorePercent}%</span>
+                                <span class="chunk-toggle">▼</span>
+                            </div>
+                            <div class="source-text" id="${chunkId}" style="display: none;">${escapeHtml(source.text)}</div>
+                        </div>
+                    `;
+                });
+                
+                answerHtml += `
+                        </div>
                     </div>
                 `;
             });
+            
             answerHtml += '</div>';
         }
         
