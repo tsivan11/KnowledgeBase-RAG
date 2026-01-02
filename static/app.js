@@ -2,6 +2,9 @@
 let currentDomain = null;
 let selectedFiles = [];
 let conversationHistory = {};  // Store conversation history per domain
+let currentConversationId = null;  // Track active conversation
+let conversations = {};  // All saved conversations
+let conversationsDisplayLimit = 20;  // Number of conversations to show initially
 
 // DOM Elements
 const domainList = document.getElementById('domainList');
@@ -34,6 +37,7 @@ const toast = document.getElementById('toast');
 
 // Initialize
 async function init() {
+    loadConversations();
     await loadDomains();
     setupEventListeners();
 }
@@ -413,6 +417,14 @@ function setupEventListeners() {
         domainNameInput.focus();
     });
     
+    // New Conversation Button
+    const newConversationBtn = document.getElementById('newConversationBtn');
+    if (newConversationBtn) {
+        newConversationBtn.addEventListener('click', () => {
+            createNewConversation();
+        });
+    }
+    
     cancelDomainBtn.addEventListener('click', () => {
         newDomainModal.classList.remove('active');
     });
@@ -618,9 +630,14 @@ async function handleAsk() {
         conversationHistory[currentDomain].push({
             question: question,
             answer: result.answer,
-            sources: result.sources
+            sources: result.sources,
+            timestamp: Date.now()
         });
         console.log(`[DEBUG] Stored conversation, total items: ${conversationHistory[currentDomain].length}`);
+        
+        // Save conversation to localStorage
+        saveCurrentConversation(question);
+        
     } catch (error) {
         messageDiv.querySelector('.answer-text').textContent = 'Error: ' + (error.message || 'Query failed');
         showToast(error.message || 'Query failed', 'error');
@@ -631,6 +648,161 @@ async function handleAsk() {
         questionInput.disabled = false;
         questionInput.focus();
     }
+}
+
+// ===== CONVERSATION MANAGEMENT =====
+
+function loadConversations() {
+    const stored = localStorage.getItem('rag_conversations');
+    conversations = stored ? JSON.parse(stored) : {};
+    renderConversationsList();
+}
+
+function saveConversations() {
+    localStorage.setItem('rag_conversations', JSON.stringify(conversations));
+}
+
+function createNewConversation() {
+    if (!currentDomain) {
+        showToast('Please select a domain first', 'error');
+        return;
+    }
+    
+    // Clear current conversation
+    currentConversationId = null;
+    conversationHistory[currentDomain] = [];
+    messages.innerHTML = '';
+    
+    showToast('New conversation started', 'success');
+}
+
+function saveCurrentConversation(firstQuestion = null) {
+    if (!currentDomain || !conversationHistory[currentDomain] || conversationHistory[currentDomain].length === 0) {
+        return;
+    }
+    
+    // Create new conversation ID if needed
+    if (!currentConversationId) {
+        currentConversationId = `conv_${Date.now()}`;
+        const title = firstQuestion || conversationHistory[currentDomain][0].question;
+        conversations[currentConversationId] = {
+            id: currentConversationId,
+            domain: currentDomain,
+            title: title.substring(0, 50) + (title.length > 50 ? '...' : ''),
+            history: [],
+            created: Date.now(),
+            updated: Date.now()
+        };
+    }
+    
+    // Update conversation
+    conversations[currentConversationId].history = conversationHistory[currentDomain];
+    conversations[currentConversationId].updated = Date.now();
+    
+    saveConversations();
+    renderConversationsList();
+}
+
+function loadConversation(convId) {
+    const conv = conversations[convId];
+    if (!conv) return;
+    
+    // Switch domain if needed
+    if (conv.domain !== currentDomain) {
+        selectDomain(conv.domain);
+    }
+    
+    // Load conversation
+    currentConversationId = convId;
+    conversationHistory[conv.domain] = conv.history;
+    
+    // Render messages
+    messages.innerHTML = '';
+    conv.history.forEach(item => {
+        addMessage(item.question, item.answer, item.sources);
+    });
+    
+    showToast('Conversation loaded', 'success');
+    renderConversationsList();
+}
+
+function deleteConversation(convId) {
+    if (confirm('Delete this conversation?')) {
+        delete conversations[convId];
+        
+        if (currentConversationId === convId) {
+            currentConversationId = null;
+            conversationHistory[currentDomain] = [];
+            messages.innerHTML = '';
+        }
+        
+        saveConversations();
+        renderConversationsList();
+        showToast('Conversation deleted', 'success');
+    }
+}
+
+function renderConversationsList(showAll = false) {
+    const conversationsList = document.getElementById('conversationsList');
+    if (!conversationsList) return;
+    
+    const convArray = Object.values(conversations)
+        .sort((a, b) => b.updated - a.updated);
+    
+    if (convArray.length === 0) {
+        conversationsList.innerHTML = '<div class="conversations-empty">No conversations yet</div>';
+        return;
+    }
+    
+    // Determine how many to show
+    const displayCount = showAll ? convArray.length : Math.min(conversationsDisplayLimit, convArray.length);
+    const displayConvs = convArray.slice(0, displayCount);
+    
+    // Group by domain
+    const byDomain = {};
+    displayConvs.forEach(conv => {
+        if (!byDomain[conv.domain]) {
+            byDomain[conv.domain] = [];
+        }
+        byDomain[conv.domain].push(conv);
+    });
+    
+    let html = '';
+    Object.keys(byDomain).sort().forEach(domain => {
+        html += `<div class="conv-domain-group">
+            <div class="conv-domain-name">${escapeHtml(domain)}</div>`;
+        
+        byDomain[domain].forEach(conv => {
+            const isActive = conv.id === currentConversationId;
+            const date = new Date(conv.updated).toLocaleDateString();
+            html += `
+                <div class="conv-item ${isActive ? 'active' : ''}" onclick="loadConversation('${conv.id}')">
+                    <div class="conv-title">${escapeHtml(conv.title)}</div>
+                    <div class="conv-meta">
+                        <span>${date}</span>
+                        <span>${conv.history.length} msgs</span>
+                    </div>
+                    <button class="conv-delete" onclick="event.stopPropagation(); deleteConversation('${conv.id}')">×</button>
+                </div>
+            `;
+        });
+        
+        html += '</div>';
+    });
+    
+    // Add "Load More" button if there are more conversations
+    if (!showAll && convArray.length > conversationsDisplayLimit) {
+        const remaining = convArray.length - conversationsDisplayLimit;
+        html += `
+            <div class="conv-load-more">
+                <button class="btn-load-more" onclick="renderConversationsList(true)">
+                    Load ${remaining} more...
+                </button>
+            </div>
+        `;
+    }
+    
+    conversationsList.innerHTML = html;
 }
 
 // Start
