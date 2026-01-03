@@ -542,7 +542,7 @@ async function handleAsk() {
         </div>
         <div class="message-answer">
             <strong>A:</strong>
-            <div class="answer-text">Thinking...</div>
+            <div class="answer-text"><span class="typing-indicator"><span></span><span></span><span></span></span></div>
         </div>
     `;
     messages.appendChild(messageDiv);
