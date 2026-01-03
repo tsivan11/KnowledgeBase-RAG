@@ -343,7 +343,11 @@ function addMessage(question, answer, sources) {
                 <div class="source-group">
                     <div class="source-group-header" onclick="toggleSourceGroup('${sourceId}')">
                         <span class="source-toggle">▶</span>
-                        <span class="source-file">${escapeHtml(filename)}</span>
+                        <a href="#" 
+                           class="source-file-link"
+                           onclick="event.stopPropagation(); openLocalFile('${currentDomain}', '${escapeHtml(filename).replace(/'/g, "\\'")}'); return false;">
+                            ${escapeHtml(filename)}
+                        </a>
                         <span class="source-count">${docSources.length} chunk${docSources.length > 1 ? 's' : ''}</span>
                     </div>
                     <div class="source-group-items" id="${sourceId}" style="display: none;">
@@ -403,6 +407,22 @@ function startPolling() {
             await loadDomains(true);
         }
     }, 5000);
+}
+
+// Open local file in default system application
+async function openLocalFile(domain, filename) {
+    try {
+        // Try to use the API endpoint to trigger opening
+        const response = await fetch(`/api/open-file/${encodeURIComponent(domain)}/${encodeURIComponent(filename)}`);
+        const data = await response.json();
+        
+        if (!response.ok) {
+            alert(`Could not open file: ${data.detail || 'Unknown error'}`);
+        }
+    } catch (error) {
+        console.error('Error opening file:', error);
+        alert('Error opening file. Check console for details.');
+    }
 }
 
 function escapeHtml(text) {

@@ -12,7 +12,7 @@ from datetime import datetime
 
 from fastapi import FastAPI, UploadFile, File, HTTPException, BackgroundTasks
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import HTMLResponse, FileResponse
+from fastapi.responses import HTMLResponse, FileResponse, Response
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import numpy as np
@@ -488,6 +488,117 @@ async def delete_domain(domain_name: str):
         shutil.rmtree(data_path)
     
     return {"message": f"Domain '{domain_name}' deleted successfully"}
+
+
+@app.get("/api/documents/{domain}/{filepath:path}")
+async def serve_document(domain: str, filepath: str):
+    """Serve a document file from a domain's kb folder."""
+    from urllib.parse import unquote
+    
+    # URL decode the filepath
+    filepath = unquote(filepath)
+    
+    # Security: prevent path traversal
+    domain = domain.replace("..", "").replace("/", "").replace("\\", "")
+    
+    file_path = KB_DIR / domain / filepath
+    
+    # If file doesn't exist at direct path, search recursively in subdirectories
+    if not file_path.exists():
+        domain_dir = KB_DIR / domain
+        if domain_dir.exists():
+            # Search for the file recursively
+            for found_file in domain_dir.glob(f"**/{filepath}"):
+                if found_file.is_file():
+                    file_path = found_file
+                    break
+    
+    if not file_path.exists() or not file_path.is_file():
+        raise HTTPException(status_code=404, detail=f"Document not found: {filepath}")
+    
+    # Security check: ensure file is within domain folder
+    try:
+        file_path.resolve().relative_to((KB_DIR / domain).resolve())
+    except ValueError:
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    # Determine media type - force common types
+    extension = file_path.suffix.lower()
+    media_type_map = {
+        '.txt': 'text/plain',
+        '.md': 'text/plain',
+        '.csv': 'text/csv',
+        '.json': 'application/json',
+        '.pdf': 'application/pdf',
+        '.png': 'image/png',
+        '.jpg': 'image/jpeg',
+        '.jpeg': 'image/jpeg',
+        '.gif': 'image/gif',
+        '.svg': 'image/svg+xml',
+    }
+    
+    media_type = media_type_map.get(extension)
+    if not media_type:
+        import mimetypes
+        media_type = mimetypes.guess_type(file_path)[0] or "application/octet-stream"
+    
+    # Read file content
+    with open(file_path, 'rb') as f:
+        content = f.read()
+    
+    # Return response without Content-Disposition for viewable files
+    return Response(
+        content=content,
+        media_type=media_type
+    )
+
+
+
+@app.get("/api/open-file/{domain}/{filepath:path}")
+async def open_local_file(domain: str, filepath: str):
+    """Open a file from the kb folder using the system's default application."""
+    from urllib.parse import unquote
+    import subprocess
+    import platform
+    
+    # URL decode the filepath
+    filepath = unquote(filepath)
+    
+    # Security: prevent path traversal
+    domain = domain.replace("..", "").replace("/", "").replace("\\", "")
+    
+    file_path = KB_DIR / domain / filepath
+    
+    # If file doesn't exist at direct path, search recursively
+    if not file_path.exists():
+        domain_dir = KB_DIR / domain
+        if domain_dir.exists():
+            for found_file in domain_dir.glob(f"**/{filepath}"):
+                if found_file.is_file():
+                    file_path = found_file
+                    break
+    
+    if not file_path.exists() or not file_path.is_file():
+        raise HTTPException(status_code=404, detail=f"Document not found: {filepath}")
+    
+    # Security check
+    try:
+        file_path.resolve().relative_to((KB_DIR / domain).resolve())
+    except ValueError:
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    # Open file with default application
+    try:
+        if platform.system() == 'Windows':
+            os.startfile(str(file_path))
+        elif platform.system() == 'Darwin':  # macOS
+            subprocess.run(['open', str(file_path)])
+        else:  # Linux
+            subprocess.run(['xdg-open', str(file_path)])
+        
+        return {"message": f"Opened {file_path.name}"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error opening file: {str(e)}")
 
 
 # Mount static files last
