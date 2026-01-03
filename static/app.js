@@ -6,6 +6,34 @@ let currentConversationId = null;  // Track active conversation
 let conversations = {};  // All saved conversations
 let conversationsDisplayLimit = 20;  // Number of conversations to show initially
 
+// Theme handling
+const themeToggle = document.getElementById('themeToggle');
+const themeIcon = document.getElementById('themeIcon');
+const themeText = document.getElementById('themeText');
+
+// Load saved theme or default to dark
+const savedTheme = localStorage.getItem('theme') || 'dark';
+document.documentElement.setAttribute('data-theme', savedTheme);
+updateThemeButton(savedTheme);
+
+function updateThemeButton(theme) {
+    if (theme === 'light') {
+        themeIcon.textContent = '🌙';
+        themeText.textContent = 'Dark';
+    } else {
+        themeIcon.textContent = '☀️';
+        themeText.textContent = 'Light';
+    }
+}
+
+themeToggle.addEventListener('click', () => {
+    const currentTheme = document.documentElement.getAttribute('data-theme');
+    const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+    document.documentElement.setAttribute('data-theme', newTheme);
+    localStorage.setItem('theme', newTheme);
+    updateThemeButton(newTheme);
+});
+
 // DOM Elements
 const domainList = document.getElementById('domainList');
 const newDomainBtn = document.getElementById('newDomainBtn');
