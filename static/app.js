@@ -345,6 +345,7 @@ function addMessage(question, answer, sources) {
                         <span class="source-toggle">▶</span>
                         <a href="#" 
                            class="source-file-link"
+                           style="color: #60a5fa; text-decoration: none; font-weight: 600; cursor: pointer;"
                            onclick="event.stopPropagation(); openLocalFile('${currentDomain}', '${escapeHtml(filename).replace(/'/g, "\\'")}'); return false;">
                             ${escapeHtml(filename)}
                         </a>
@@ -630,7 +631,12 @@ async function handleAsk() {
                     <div class="source-group">
                         <div class="source-group-header" onclick="toggleSourceGroup('${sourceId}')">
                             <span class="source-toggle">▶</span>
-                            <span class="source-file">${escapeHtml(filename)}</span>
+                            <a href="#" 
+                               class="source-file-link"
+                               style="color: #60a5fa; text-decoration: none; font-weight: 600; cursor: pointer;"
+                               onclick="event.stopPropagation(); openLocalFile('${currentDomain}', '${escapeHtml(filename).replace(/'/g, "\\'")}'); return false;">
+                                ${escapeHtml(filename)}
+                            </a>
                             <span class="source-count">${docSources.length} chunk${docSources.length > 1 ? 's' : ''}</span>
                         </div>
                         <div class="source-group-items" id="${sourceId}" style="display: none;">
