@@ -28,7 +28,7 @@ def get_paths(domain: str):
 
 def iter_document_paths(root: Path):
     """Discover all supported document types in directory and all subdirectories."""
-    supported = {".pdf", ".txt", ".md", ".docx", ".html", ".htm", ".csv", ".xlsx", ".xls", ".pptx", ".jpg", ".jpeg", ".png", ".tiff", ".tif", ".bmp"}
+    supported = {".pdf", ".txt", ".md", ".docx", ".html", ".htm", ".csv", ".xlsx", ".xls", ".pptx", ".jpg", ".jpeg", ".png", ".tiff", ".tif", ".bmp", ".mp3", ".mp4", ".mpeg", ".mpga", ".m4a", ".wav", ".webm"}
     return sorted([f for f in root.glob("**/*") if f.is_file() and f.suffix.lower() in supported])
 
 

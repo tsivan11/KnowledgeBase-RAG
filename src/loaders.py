@@ -17,6 +17,11 @@ except ImportError:
     fitz = None
 
 try:
+    from openai import OpenAI
+except ImportError:
+    OpenAI = None
+
+try:
     import pytesseract
     from PIL import Image
 except ImportError:
@@ -389,6 +394,52 @@ def load_image(file_path: Path) -> Iterator[Dict[str, Any]]:
         logger.warning(f"Failed to load image {file_path}: {e}")
 
 
+def load_audio(file_path: Path) -> Iterator[Dict[str, Any]]:
+    """Transcribe audio file using OpenAI Whisper API."""
+    if OpenAI is None:
+        logger.warning(f"OpenAI not installed, skipping {file_path}")
+        return
+    
+    import os
+    if not os.getenv("OPENAI_API_KEY"):
+        logger.warning(f"OPENAI_API_KEY not set, skipping {file_path}")
+        return
+    
+    try:
+        client = OpenAI()
+        
+        # Check file size (Whisper API limit is 25MB)
+        file_size_mb = file_path.stat().st_size / (1024 * 1024)
+        if file_size_mb > 25:
+            logger.warning(f"Audio file {file_path.name} is {file_size_mb:.1f}MB, exceeds 25MB limit")
+            return
+        
+        logger.info(f"Transcribing audio file: {file_path.name} ({file_size_mb:.1f}MB)...")
+        
+        with open(file_path, "rb") as audio_file:
+            transcript = client.audio.transcriptions.create(
+                model="whisper-1",
+                file=audio_file,
+                response_format="text"
+            )
+        
+        # Return full transcript as single page
+        # Let the chunker handle splitting intelligently
+        if transcript and transcript.strip():
+            yield {
+                "source": file_path.name,
+                "source_type": "audio",
+                "page": None,
+                "section": None,
+                "text": transcript.strip(),
+            }
+        
+        logger.info(f"Successfully transcribed {file_path.name}")
+        
+    except Exception as e:
+        logger.warning(f"Failed to transcribe audio {file_path}: {e}")
+
+
 # Loader registry
 LOADERS = {
     ".pdf": load_pdf,
@@ -407,6 +458,14 @@ LOADERS = {
     ".tiff": load_image,
     ".tif": load_image,
     ".bmp": load_image,
+    # Audio formats
+    ".mp3": load_audio,
+    ".mp4": load_audio,
+    ".mpeg": load_audio,
+    ".mpga": load_audio,
+    ".m4a": load_audio,
+    ".wav": load_audio,
+    ".webm": load_audio,
 }
 
 

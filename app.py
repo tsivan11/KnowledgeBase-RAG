@@ -87,7 +87,8 @@ def get_domain_files(domain: str) -> List[Path]:
         return []
     
     supported = {".pdf", ".txt", ".md", ".docx", ".html", ".htm", ".csv", 
-                 ".xlsx", ".xls", ".pptx", ".jpg", ".jpeg", ".png", ".tiff", ".tif", ".bmp"}
+                 ".xlsx", ".xls", ".pptx", ".jpg", ".jpeg", ".png", ".tiff", ".tif", ".bmp",
+                 ".mp3", ".mp4", ".mpeg", ".mpga", ".m4a", ".wav", ".webm"}
     return [f for f in domain_path.glob("**/*") if f.is_file() and f.suffix.lower() in supported]
 
 
