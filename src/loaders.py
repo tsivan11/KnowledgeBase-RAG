@@ -5,10 +5,19 @@ Each loader yields normalized records: {source, source_type, section, page, text
 """
 import json
 import logging
+import os
 from pathlib import Path
 from typing import Iterator, Dict, Any
+from dotenv import load_dotenv
+
+load_dotenv()
 
 logger = logging.getLogger(__name__)
+
+# Vision API configuration
+USE_VISION_API = os.getenv("USE_VISION_API", "false").lower() == "true"
+VISION_MODEL = os.getenv("VISION_MODEL", "gpt-4o-mini")
+MAX_IMAGES_PER_FILE = int(os.getenv("MAX_IMAGES_PER_FILE", "5"))
 
 # Optional dependencies
 try:
@@ -52,6 +61,56 @@ try:
     import pdfplumber
 except ImportError:
     pdfplumber = None
+
+
+def _analyze_image_with_vision(image_bytes: bytes) -> str:
+    """Analyze image using GPT-4 Vision API."""
+    if not USE_VISION_API or OpenAI is None:
+        return ""
+    
+    import base64
+    from io import BytesIO
+    
+    try:
+        client = OpenAI()
+        base64_image = base64.b64encode(image_bytes).decode('utf-8')
+        
+        # Determine format
+        try:
+            if Image:
+                img = Image.open(BytesIO(image_bytes))
+                format_str = img.format.lower() if img.format else "jpeg"
+            else:
+                format_str = "jpeg"
+        except:
+            format_str = "jpeg"
+        
+        response = client.chat.completions.create(
+            model=VISION_MODEL,
+            messages=[
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": "Describe this image in detail. Extract any text, describe any diagrams, charts, tables, or visual elements. Be comprehensive and focus on information that would be useful for answering questions about this document."
+                        },
+                        {
+                            "type": "image_url",
+                            "image_url": {
+                                "url": f"data:image/{format_str};base64,{base64_image}",
+                                "detail": "high"
+                            }
+                        }
+                    ]
+                }
+            ],
+            max_tokens=1000
+        )
+        return response.choices[0].message.content
+    except Exception as e:
+        logger.debug(f"Vision API failed: {e}")
+        return ""
 
 
 def _ocr_page(page: "fitz.Page") -> str:
@@ -206,7 +265,7 @@ def load_md(file_path: Path) -> Iterator[Dict[str, Any]]:
 
 
 def load_docx(file_path: Path) -> Iterator[Dict[str, Any]]:
-    """Load DOCX file; extract paragraphs."""
+    """Load DOCX file; extract paragraphs and images."""
     if Document is None:
         logger.warning(f"python-docx not installed, skipping {file_path}")
         return
@@ -215,16 +274,50 @@ def load_docx(file_path: Path) -> Iterator[Dict[str, Any]]:
         doc = Document(file_path)
         source = file_path.name
         
-        for idx, para in enumerate(doc.paragraphs, start=1):
+        # Extract text paragraphs
+        text_parts = []
+        for para in doc.paragraphs:
             text = para.text.strip()
             if text:
-                yield {
-                    "source": source,
-                    "source_type": "docx",
-                    "page": None,
-                    "section": idx,
-                    "text": text,
-                }
+                text_parts.append(text)
+        
+        # Extract images if vision enabled
+        image_descriptions = []
+        total_images = 0
+        if USE_VISION_API:
+            img_index = 1
+            for rel in doc.part.rels.values():
+                if "image" in rel.target_ref:
+                    total_images += 1
+                    if MAX_IMAGES_PER_FILE > 0 and img_index > MAX_IMAGES_PER_FILE:
+                        continue
+                    try:
+                        image_bytes = rel.target_part.blob
+                        description = _analyze_image_with_vision(image_bytes)
+                        if description:
+                            image_descriptions.append(f"[Image {img_index}]: {description}")
+                            img_index += 1
+                    except:
+                        pass
+            if MAX_IMAGES_PER_FILE > 0 and total_images > MAX_IMAGES_PER_FILE:
+                logger.warning(f"Processed {MAX_IMAGES_PER_FILE}/{total_images} images in {source} (limit reached)")
+        
+        # Combine text and images
+        content_parts = []
+        if text_parts:
+            content_parts.append("\n\n".join(text_parts))
+        if image_descriptions:
+            content_parts.append("\n\n=== EMBEDDED IMAGES ===\n\n" + "\n\n".join(image_descriptions))
+        
+        combined_text = "\n\n".join(content_parts).strip()
+        if combined_text:
+            yield {
+                "source": source,
+                "source_type": "docx",
+                "page": None,
+                "section": None,
+                "text": combined_text,
+            }
     except Exception as e:
         logger.warning(f"Failed to load DOCX {file_path}: {e}")
 
@@ -298,94 +391,172 @@ def load_csv(file_path: Path) -> Iterator[Dict[str, Any]]:
 
 
 def load_xlsx(file_path: Path) -> Iterator[Dict[str, Any]]:
-    """Load Excel file; process each sheet and row with column context."""
+    """Load Excel file; process each sheet with text and images."""
     if pd is None:
         logger.warning(f"pandas not installed, skipping {file_path}")
         return
     
     try:
-        # Read all sheets
+        # Read text data with pandas
         excel_file = pd.ExcelFile(file_path)
         source = file_path.name
         
+        # Extract images if vision enabled (requires openpyxl)
+        sheet_images = {}
+        total_images_processed = 0
+        if USE_VISION_API:
+            try:
+                from openpyxl import load_workbook
+                wb = load_workbook(file_path)
+                for sheet in wb.worksheets:
+                    images = []
+                    if hasattr(sheet, '_images') and sheet._images:
+                        for img_index, img in enumerate(sheet._images, start=1):
+                            if MAX_IMAGES_PER_FILE > 0 and total_images_processed >= MAX_IMAGES_PER_FILE:
+                                break
+                            try:
+                                image_bytes = img._data()
+                                description = _analyze_image_with_vision(image_bytes)
+                                if description:
+                                    images.append(f"[Image {img_index}]: {description}")
+                                    total_images_processed += 1
+                            except:
+                                pass
+                    if images:
+                        sheet_images[sheet.title] = images
+                    if MAX_IMAGES_PER_FILE > 0 and total_images_processed >= MAX_IMAGES_PER_FILE:
+                        break
+                wb.close()
+            except ImportError:
+                pass  # openpyxl not available
+            except Exception as e:
+                logger.debug(f"Failed to extract Excel images: {e}")
+        
+        # Process each sheet
         for sheet_name in excel_file.sheet_names:
             df = pd.read_excel(excel_file, sheet_name=sheet_name)
             
+            # Build text from rows
+            text_parts = []
             for idx, row in df.iterrows():
-                # Format row as key=value pairs
-                text_parts = []
+                row_parts = []
                 for col, val in row.items():
                     if pd.notna(val):
-                        text_parts.append(f"{col}: {val}")
-                
-                text = " | ".join(text_parts)
-                if text.strip():
-                    yield {
-                        "source": source,
-                        "source_type": "xlsx",
-                        "page": None,
-                        "section": f"{sheet_name}::row_{idx + 2}",  # +2 for header and 0-indexing
-                        "text": text,
-                    }
+                        row_parts.append(f"{col}: {val}")
+                if row_parts:
+                    text_parts.append(" | ".join(row_parts))
+            
+            # Combine text and images for this sheet
+            content_parts = []
+            if text_parts:
+                content_parts.append("\n".join(text_parts))
+            if sheet_name in sheet_images:
+                content_parts.append("\n\n=== EMBEDDED IMAGES ===\n\n" + "\n\n".join(sheet_images[sheet_name]))
+            
+            combined_text = "\n\n".join(content_parts).strip()
+            if combined_text:
+                yield {
+                    "source": source,
+                    "source_type": "xlsx",
+                    "page": None,
+                    "section": sheet_name,
+                    "text": combined_text,
+                }
     except Exception as e:
         logger.warning(f"Failed to load Excel {file_path}: {e}")
 
 
 def load_pptx(file_path: Path) -> Iterator[Dict[str, Any]]:
-    """Load PowerPoint file; extract text from slides."""
+    """Load PowerPoint file; extract text and images from slides."""
     if Presentation is None:
         logger.warning(f"python-pptx not installed, skipping {file_path}")
         return
     
     try:
+        from pptx.enum.shapes import MSO_SHAPE_TYPE
         prs = Presentation(file_path)
         source = file_path.name
+        total_images_in_file = 0
         
         for slide_idx, slide in enumerate(prs.slides, start=1):
-            text_parts = []
-            
             # Extract text from all shapes
+            text_parts = []
             for shape in slide.shapes:
                 if hasattr(shape, "text") and shape.text:
                     text_parts.append(shape.text.strip())
             
-            text = "\n".join(text_parts)
-            if text.strip():
+            # Extract images if vision enabled
+            image_descriptions = []
+            if USE_VISION_API:
+                img_index = 1
+                for shape in slide.shapes:
+                    if shape.shape_type == MSO_SHAPE_TYPE.PICTURE:
+                        if MAX_IMAGES_PER_FILE > 0 and total_images_in_file >= MAX_IMAGES_PER_FILE:
+                            break
+                        try:
+                            image = shape.image
+                            image_bytes = image.blob
+                            description = _analyze_image_with_vision(image_bytes)
+                            if description:
+                                image_descriptions.append(f"[Image {img_index}]: {description}")
+                                img_index += 1
+                                total_images_in_file += 1
+                        except:
+                            pass
+            
+            # Combine text and images
+            content_parts = []
+            if text_parts:
+                content_parts.append("\n".join(text_parts))
+            if image_descriptions:
+                content_parts.append("\n\n=== EMBEDDED IMAGES ===\n\n" + "\n\n".join(image_descriptions))
+            
+            combined_text = "\n\n".join(content_parts).strip()
+            if combined_text:
                 yield {
                     "source": source,
                     "source_type": "pptx",
                     "page": slide_idx,
                     "section": None,
-                    "text": text,
+                    "text": combined_text,
                 }
     except Exception as e:
         logger.warning(f"Failed to load PowerPoint {file_path}: {e}")
 
 
 def load_image(file_path: Path) -> Iterator[Dict[str, Any]]:
-    """Load image file and extract text via OCR."""
-    if pytesseract is None or Image is None:
-        logger.warning(f"pytesseract or Pillow not installed, skipping {file_path}")
-        return
-    
-    import os
-    tess_cmd = os.getenv("TESSERACT_CMD")
-    if tess_cmd:
-        pytesseract.pytesseract.tesseract_cmd = tess_cmd
-    else:
-        default_win = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
-        if os.path.exists(default_win):
-            pytesseract.pytesseract.tesseract_cmd = default_win
-    
+    """Load image file and extract text via Vision API or OCR."""
     try:
-        img = Image.open(file_path)
-        text = pytesseract.image_to_string(img)
-        text = (text or "").strip()
+        image_bytes = file_path.read_bytes()
+        text = ""
+        
+        # Try Vision API first if enabled
+        if USE_VISION_API:
+            text = _analyze_image_with_vision(image_bytes)
+            if text:
+                logger.debug(f"Used Vision API for {file_path.name}")
+        
+        # Fallback to Tesseract OCR if vision disabled or failed
+        if not text and pytesseract is not None and Image is not None:
+            import os
+            tess_cmd = os.getenv("TESSERACT_CMD")
+            if tess_cmd:
+                pytesseract.pytesseract.tesseract_cmd = tess_cmd
+            else:
+                default_win = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
+                if os.path.exists(default_win):
+                    pytesseract.pytesseract.tesseract_cmd = default_win
+            
+            img = Image.open(file_path)
+            text = pytesseract.image_to_string(img)
+            text = (text or "").strip()
+            if text:
+                logger.debug(f"Used Tesseract OCR for {file_path.name}")
         
         if text:
             yield {
                 "source": file_path.name,
-                "source_type": file_path.suffix.lower()[1:],  # e.g., "jpg", "png"
+                "source_type": file_path.suffix.lower()[1:],
                 "page": None,
                 "section": None,
                 "text": text,
