@@ -1,0 +1,52 @@
+[
+  {
+    "question": "What is [key concept from your domain]?",
+    "expected_answer": "Brief expected answer",
+    "notes": "This tests basic factual recall"
+  },
+  {
+    "question": "How does [process/mechanism] work?",
+    "expected_answer": "Expected explanation",
+    "notes": "This tests explanatory answers"
+  },
+  {
+    "question": "What's the difference between [concept A] and [concept B]?",
+    "expected_answer": "Expected comparison",
+    "notes": "This tests comparative analysis"
+  },
+  {
+    "question": "Why is [something] important?",
+    "expected_answer": null,
+    "notes": "Tests reasoning - expected_answer can be null if you just want to see what it says"
+  },
+  {
+    "question": "What is the population of Mars?",
+    "expected_answer": null,
+    "notes": "Out-of-scope question - should say 'I don't know' or clarify Mars is uninhabited"
+  },
+  {
+    "question": "Can you summarize the main points about [topic]?",
+    "expected_answer": "Expected summary",
+    "notes": "Tests multi-document synthesis"
+  },
+  {
+    "question": "What are the key requirements for [something]?",
+    "expected_answer": "Expected list",
+    "notes": "Tests list/enumeration extraction"
+  },
+  {
+    "question": "When was [event/date]?",
+    "expected_answer": "Expected date/time",
+    "notes": "Tests temporal information extraction"
+  },
+  {
+    "question": "Who is responsible for [task/role]?",
+    "expected_answer": null,
+    "notes": "Tests entity extraction"
+  },
+  {
+    "question": "What happens if [scenario/condition]?",
+    "expected_answer": null,
+    "notes": "Tests conditional reasoning"
+  }
+]

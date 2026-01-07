@@ -113,7 +113,38 @@ def _analyze_image_with_vision(image_bytes: bytes) -> str:
         return ""
 
 
-def _ocr_page(page: "fitz.Page") -> str:
+def _format_table(table) -> str:
+    """Format a pdfplumber table into a readable text representation."""
+    if not table:
+        return ""
+    
+    try:
+        # Filter out None rows and cells
+        rows = []
+        for row in table:
+            if row:
+                cleaned_row = [str(cell).strip() if cell is not None else "" for cell in row]
+                rows.append(cleaned_row)
+        
+        if not rows:
+            return ""
+        
+        # Calculate column widths
+        col_widths = [max(len(str(row[i])) for row in rows if i < len(row)) for i in range(len(rows[0]))]
+        
+        # Format rows
+        formatted_rows = []
+        for row in rows:
+            formatted_row = " | ".join(str(cell).ljust(col_widths[i]) for i, cell in enumerate(row))
+            formatted_rows.append(formatted_row)
+        
+        return "\n".join(formatted_rows)
+    except Exception as e:
+        logger.debug(f"Table formatting failed: {e}")
+        return str(table)
+
+
+def _ocr_page(page) -> str:
     """OCR a PDF page if pytesseract is available."""
     if pytesseract is None or Image is None:
         return ""

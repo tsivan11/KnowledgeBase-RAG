@@ -73,6 +73,23 @@ class DomainInfo(BaseModel):
 
 
 # Helper functions
+def validate_domain_name(domain_name: str) -> bool:
+    """Validate domain name to prevent path traversal attacks."""
+    import re
+    # Allow only alphanumeric, underscore, hyphen
+    if not re.match(r'^[a-zA-Z0-9_-]+$', domain_name):
+        return False
+    # Prevent path traversal
+    if '..' in domain_name or '/' in domain_name or '\\' in domain_name:
+        return False
+    return True
+
+
+def validate_file_size(file_size: int, max_mb: int = 100) -> bool:
+    """Validate file size is within limits."""
+    return file_size <= max_mb * 1024 * 1024
+
+
 def get_domains() -> List[str]:
     """Get list of all domains."""
     if not KB_DIR.exists():
@@ -416,6 +433,12 @@ async def list_domains():
 @app.post("/api/domains/{domain_name}")
 async def create_domain(domain_name: str):
     """Create a new domain."""
+    if not validate_domain_name(domain_name):
+        raise HTTPException(
+            status_code=400, 
+            detail="Invalid domain name. Use only letters, numbers, underscores, and hyphens."
+        )
+    
     domain_path = KB_DIR / domain_name
     
     if domain_path.exists():
@@ -432,6 +455,12 @@ async def upload_files(
     files: List[UploadFile] = File(...)
 ):
     """Upload files to a domain and trigger processing."""
+    if not validate_domain_name(domain_name):
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid domain name. Use only letters, numbers, underscores, and hyphens."
+        )
+    
     domain_path = KB_DIR / domain_name
     
     if not domain_path.exists():
@@ -439,10 +468,39 @@ async def upload_files(
     
     uploaded_files = []
     for file in files:
+        # Validate filename
+        if '..' in file.filename or '/' in file.filename or '\\' in file.filename:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid filename: {file.filename}"
+            )
+        
+        # Read file content
+        content = await file.read()
+        
+        # Validate file size (100MB limit)
+        if not validate_file_size(len(content)):
+            raise HTTPException(
+                status_code=400,
+                detail=f"File {file.filename} exceeds 100MB limit"
+            )
+        
+        # Validate file extension
+        file_ext = Path(file.filename).suffix.lower()
+        allowed_extensions = {
+            ".pdf", ".txt", ".md", ".docx", ".html", ".htm", ".csv",
+            ".xlsx", ".xls", ".pptx", ".jpg", ".jpeg", ".png", ".tiff", ".tif", ".bmp",
+            ".mp3", ".mp4", ".mpeg", ".mpga", ".m4a", ".wav", ".webm"
+        }
+        if file_ext not in allowed_extensions:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Unsupported file type: {file_ext}"
+            )
+        
         file_path = domain_path / file.filename
         
         with file_path.open("wb") as f:
-            content = await file.read()
             f.write(content)
         
         uploaded_files.append(file.filename)
@@ -460,6 +518,12 @@ async def upload_files(
 @app.post("/api/process/{domain_name}")
 async def trigger_processing(domain_name: str, background_tasks: BackgroundTasks):
     """Manually trigger processing for a domain."""
+    if not validate_domain_name(domain_name):
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid domain name"
+        )
+    
     domain_path = KB_DIR / domain_name
     
     if not domain_path.exists():
@@ -480,6 +544,12 @@ async def query(request: QueryRequest):
 @app.delete("/api/domains/{domain_name}")
 async def delete_domain(domain_name: str):
     """Delete a domain and its data."""
+    if not validate_domain_name(domain_name):
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid domain name"
+        )
+    
     domain_path = KB_DIR / domain_name
     data_path = DATA_DIR / domain_name
     

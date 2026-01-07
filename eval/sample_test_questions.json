@@ -1,0 +1,23 @@
+[
+  {
+    "question": "What is the main mission of the James Webb Space Telescope?",
+    "expected_answer": "The James Webb Space Telescope is designed to study the early universe, observe distant galaxies, and analyze the atmospheres of exoplanets."
+  },
+  {
+    "question": "What are the main differences between Phobos and Deimos?",
+    "expected_answer": "Phobos is larger and orbits closer to Mars, while Deimos is smaller and orbits farther away."
+  },
+  {
+    "question": "How does the Curiosity rover generate power?",
+    "expected_answer": "The Curiosity rover uses a radioisotope thermoelectric generator (RTG) that converts heat from plutonium-238 decay into electricity."
+  },
+  {
+    "question": "What is the surface temperature range on Mars?",
+    "expected_answer": "Mars surface temperatures vary widely, typically ranging from about -125°C (-195°F) at the poles during winter to 20°C (68°F) at the equator during summer."
+  },
+  {
+    "question": "What is the current population of Jupiter?",
+    "expected_answer": null,
+    "notes": "This is a trick question - Jupiter has no population. The system should say it doesn't know or clarify that Jupiter is uninhabited."
+  }
+]

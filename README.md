@@ -99,6 +99,20 @@ Direct question mode:
 python src/ask.py --domain my_domain --question "What is the main topic of this document?"
 ```
 
+##### 4. Evaluate RAG Quality (Optional)
+
+Test your RAG system's quality:
+
+```bash
+# Interactive testing
+python src/evaluate.py --domain my_domain --interactive
+
+# Batch testing with a test file
+python src/evaluate.py --domain my_domain --test-file eval/sample_test_questions.json
+```
+
+See [eval/README.md](eval/README.md) for detailed evaluation guide.
+
 ## 📁 Project Structure
 
 ```
@@ -124,7 +138,11 @@ KnowledgeBase-RAG/
 │   ├── ingest_pdfs.py          # Document ingestion
 │   ├── chunk_pages.py          # Text chunking
 │   ├── build_index.py          # Vector index creation
-│   └── ask.py                  # Query interface
+│   ├── ask.py                  # Query interface
+│   └── evaluate.py             # RAG quality evaluation
+├── eval/                        # Evaluation tests (optional)
+│   ├── README.md               # Evaluation guide
+│   └── sample_test_questions.json
 ├── requirements.txt
 ├── .gitignore
 └── README.md
