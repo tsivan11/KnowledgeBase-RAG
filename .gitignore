@@ -10,12 +10,15 @@ ENV/
 .venv
 
 # Data & indexes (user-generated)
-data/
-kb/
+data/*
+!data/.gitkeep
+kb/*
+!kb/.gitkeep
 
 # Environment variables (contains API key!)
 .env
 .env.*
+!.env.example
 
 # IDE
 .vscode/
