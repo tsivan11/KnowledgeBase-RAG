@@ -162,8 +162,20 @@ async function queryDomain(domain, question) {
         });
         
         if (!response.ok) {
-            const error = await response.json();
-            throw new Error(error.detail || 'Query failed');
+            let errorMessage = 'Query failed';
+            try {
+                const error = await response.json();
+                errorMessage = error.detail || errorMessage;
+            } catch (parseError) {
+                // If JSON parsing fails, try to get text
+                try {
+                    const text = await response.text();
+                    errorMessage = text || `Server error: ${response.status}`;
+                } catch {
+                    errorMessage = `Server error: ${response.status} ${response.statusText}`;
+                }
+            }
+            throw new Error(errorMessage);
         }
         
         return await response.json();

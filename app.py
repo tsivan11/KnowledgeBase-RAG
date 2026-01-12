@@ -26,6 +26,17 @@ from loaders import load_file
 
 load_dotenv()
 
+# Detect the correct Python executable (venv if available, otherwise current)
+def get_python_executable():
+    """Get the Python executable to use for subprocesses."""
+    # Check if we're in a venv
+    venv_python = Path(__file__).parent / "venv" / "Scripts" / "python.exe"
+    if venv_python.exists():
+        return str(venv_python)
+    return sys.executable
+
+PYTHON_EXE = get_python_executable()
+
 app = FastAPI(title="KnowledgeBase RAG", version="1.0.0")
 
 # CORS middleware
@@ -105,7 +116,7 @@ def get_domain_files(domain: str) -> List[Path]:
     
     supported = {".pdf", ".txt", ".md", ".docx", ".html", ".htm", ".csv", 
                  ".xlsx", ".xls", ".pptx", ".jpg", ".jpeg", ".png", ".tiff", ".tif", ".bmp",
-                 ".mp3", ".mp4", ".mpeg", ".mpga", ".m4a", ".wav", ".webm"}
+                 ".mp3", ".mpeg", ".mpga", ".m4a", ".wav"}
     return [f for f in domain_path.glob("**/*") if f.is_file() and f.suffix.lower() in supported]
 
 
@@ -121,17 +132,17 @@ def process_domain(domain: str):
     try:
         # Run ingestion
         subprocess.run([
-            sys.executable, "src/ingest_pdfs.py", "--domain", domain
+            PYTHON_EXE, "src/ingest_pdfs.py", "--domain", domain
         ], check=True, cwd=BASE_DIR)
         
         # Run chunking
         subprocess.run([
-            sys.executable, "src/chunk_pages.py", "--domain", domain
+            PYTHON_EXE, "src/chunk_pages.py", "--domain", domain
         ], check=True, cwd=BASE_DIR)
         
         # Build index
         subprocess.run([
-            sys.executable, "src/build_index.py", "--domain", domain
+            PYTHON_EXE, "src/build_index.py", "--domain", domain
         ], check=True, cwd=BASE_DIR)
         
         return True
@@ -489,7 +500,7 @@ async def upload_files(
         file_ext = Path(file.filename).suffix.lower()
         allowed_extensions = {
             ".pdf", ".txt", ".md", ".docx", ".html", ".htm", ".csv",
-            ".xlsx", ".xls", ".pptx", ".jpg", ".jpeg", ".png", ".tiff", ".tif", ".bmp",
+            ".xlsx", ".xls", ".pptx", ".jpg", ".jpeg", ".png",
             ".mp3", ".mp4", ".mpeg", ".mpga", ".m4a", ".wav", ".webm"
         }
         if file_ext not in allowed_extensions:
@@ -537,8 +548,16 @@ async def trigger_processing(domain_name: str, background_tasks: BackgroundTasks
 @app.post("/api/query", response_model=QueryResponse)
 async def query(request: QueryRequest):
     """Query a domain with a question."""
-    result = query_domain(request.domain, request.question, request.conversation_history)
-    return QueryResponse(**result)
+    try:
+        result = query_domain(request.domain, request.question, request.conversation_history)
+        return QueryResponse(**result)
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        error_detail = f"Query failed: {str(e)}\n{traceback.format_exc()}"
+        print(f"[ERROR] {error_detail}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.delete("/api/domains/{domain_name}")

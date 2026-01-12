@@ -5,7 +5,7 @@ A multi-domain Retrieval-Augmented Generation (RAG) system that transforms your 
 ## ✨ Features
 
 - **Multi-Domain Support**: Organize documents into separate knowledge domains (e.g., contracts, astronomy, research)
-- **13+ File Formats**: PDF, DOCX, TXT, MD, HTML, CSV, XLSX, PPTX, JPG, PNG, TIFF, BMP
+- **13+ File Formats**: PDF, DOCX, TXT, MD, HTML, CSV, XLSX, PPTX, JPG, PNG
 - **Advanced PDF Processing**: 
   - Structured table extraction with pdfplumber
   - OCR fallback for scanned documents
@@ -167,7 +167,7 @@ KnowledgeBase-RAG/
 | HTML | `.html`, `.htm` | Heading-aware extraction |
 | Spreadsheet | `.csv`, `.xlsx`, `.xls` | Row-wise ingestion |
 | PowerPoint | `.pptx` | Slide-by-slide extraction |
-| Image | `.jpg`, `.png`, `.tiff`, `.bmp` | OCR text extraction |
+| Image | `.jpg`, `.jpeg`, `.png` | Vision API text extraction |
 
 ## 🎯 Use Cases
 

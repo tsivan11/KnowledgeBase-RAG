@@ -109,7 +109,7 @@ def _analyze_image_with_vision(image_bytes: bytes) -> str:
         )
         return response.choices[0].message.content
     except Exception as e:
-        logger.debug(f"Vision API failed: {e}")
+        logger.warning(f"Vision API failed for image: {e}")
         return ""
 
 
@@ -657,17 +657,13 @@ LOADERS = {
     ".jpg": load_image,
     ".jpeg": load_image,
     ".png": load_image,
-    ".tiff": load_image,
-    ".tif": load_image,
-    ".bmp": load_image,
+
     # Audio formats
     ".mp3": load_audio,
-    ".mp4": load_audio,
     ".mpeg": load_audio,
     ".mpga": load_audio,
     ".m4a": load_audio,
     ".wav": load_audio,
-    ".webm": load_audio,
 }
 
 
